@@ -47,8 +47,29 @@ public class Client {
 
   }
 
+  static void listen(BufferedReader reader, UUID userId) {
+    try {
+      String answer;
+
+      while ((answer = reader.readLine()) != null) {
+        var response = new PayloadReader(answer).read();
+
+        if (!response.id.equals(userId)) {
+          System.out.println("[" + response.name + "]: " + response.text);
+          System.out.print("> ");
+          System.out.flush();
+        }
+      }
+
+      System.err.println("Servidor encerrou a conexão");
+
+    } catch (Exception e) {
+      System.err.println("Conexão encerrada");
+    }
+  }
+
   public static void main(String[] aStrings) {
-    System.out.println("Hello From Client!");
+    System.out.println("CLIENT Application\n========!");
 
     String host = "localhost";
     int port = 6000;
@@ -77,8 +98,14 @@ public class Client {
         System.out.println("Conectado em " + socket.getRemoteSocketAddress() + " como " + name + "\n");
         System.out.println("Digite suas mensagens (linha vazia ou Ctrl+D encerra)");
 
+        var listener = new Thread(() -> listen(reader, userId));
+        listener.setDaemon(true);
+        listener.start();
+
         while (true) {
+          // System.out.print("[" + name + "] ");
           System.out.print("> ");
+
           System.out.flush();
 
           String text = keyboard.readLine();
@@ -89,19 +116,6 @@ public class Client {
 
           var payload = new Payload(userId, name, text);
           out.println(payload);
-
-          String answer = reader.readLine();
-
-          if (answer == null) {
-            System.err.println("Servidor encerrou a conexão");
-            break;
-          }
-
-          var response = new PayloadReader(answer).read();
-
-          if (response.id != userId) {
-            System.out.println("[" + response.name + "]: " + response.text);
-          }
         }
 
       }

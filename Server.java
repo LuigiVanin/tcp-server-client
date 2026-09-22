@@ -4,7 +4,9 @@ import java.io.PrintWriter;
 import java.net.BindException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 class Payload {
   UUID id;
@@ -53,8 +55,42 @@ class PayloadReader {
 }
 
 public class Server {
+
+  static final List<Socket> sockets = new CopyOnWriteArrayList<>();
+
+  static void handle(Socket socket) {
+    try (socket;
+        var reader = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+
+      var out = new PrintWriter(socket.getOutputStream(), true);
+      sockets.add(socket);
+
+      String content;
+
+      while ((content = reader.readLine()) != null) {
+        try {
+          var payload = new PayloadReader(content).read();
+          System.out.println("[" + payload.name + "]: " + payload.text);
+
+          for (Socket client : sockets) {
+            new PrintWriter(client.getOutputStream(), true).println(payload.toString());
+          }
+        } catch (Exception e) {
+          System.err.println("Descartando mensagem inválida: " + e.getMessage());
+          out.println(new Payload(UUID.randomUUID(), "servidor", "ERRO: " + e.getMessage()));
+        }
+      }
+
+    } catch (Exception e) {
+      System.err.println("Erro na conexão: " + e.getMessage());
+    } finally {
+      sockets.remove(socket);
+      System.out.println("conexão finalizada");
+    }
+  }
+
   public static void main(String[] aStrings) {
-    System.out.println("Hello From Server!");
+    System.out.println("SERVER Application\n========");
 
     int port = 6000;
     int maxAttmpets = 3;
@@ -70,26 +106,9 @@ public class Server {
         while (true) {
           Socket socket = server.accept();
 
-          System.out.println("conexão Aceita: " + socket.getLocalAddress());
+          System.out.println("conexão Aceita: " + socket.getRemoteSocketAddress());
 
-          var reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-          var out = new PrintWriter(socket.getOutputStream(), true);
-          String content;
-
-          while ((content = reader.readLine()) != null) {
-            try {
-              var payload = new PayloadReader(content).read();
-              out.println(payload.toString());
-              System.out.println("[" + payload.name + "]: " + payload.text);
-            } catch (Exception e) {
-              System.err.println("Descartando mensagem inválida: " + e.getMessage());
-              out.println(new Payload(UUID.randomUUID(), "servidor", "ERRO: " + e.getMessage()));
-            }
-          }
-
-          socket.close();
-          System.out.println("conexão finalizada");
-
+          new Thread(() -> handle(socket)).start();
         }
 
       } catch (BindException e) {
